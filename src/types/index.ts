@@ -4,6 +4,7 @@ export const ElementType = {
   ROUNDED_RECTANGLE: 'rounded-rectangle',
   CIRCLE: 'circle',
   TRIANGLE: 'triangle',
+  ARROW: 'arrow',
   IMAGE: 'image',
   TEXT: 'text',
 } as const;
@@ -32,6 +33,20 @@ export interface TextStyle {
   strikethrough?: boolean;
 }
 
+// 文本范围样式
+export interface TextRangeStyle {
+  start: number;
+  end: number;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strikethrough?: boolean;
+  color?: string;
+  backgroundColor?: string;
+  fontSize?: number;
+  fontFamily?: string;
+}
+
 // 基础元素属性
 export interface BaseElement {
   id: string;
@@ -46,11 +61,18 @@ export interface BaseElement {
 
 // 图形元素
 export interface ShapeElement extends BaseElement {
-  type: 'rectangle' | 'rounded-rectangle' | 'circle' | 'triangle';
+  type: 'rectangle' | 'rounded-rectangle' | 'circle' | 'triangle' | 'arrow';
   backgroundColor: string;
   borderWidth: number;
   borderColor: string;
   cornerRadius?: number; // 圆角矩形使用
+  content?: string;
+  textStyle?: TextStyle;
+  arrowStart?: { x: number; y: number };
+  arrowEnd?: { x: number; y: number };
+  arrowHeadSize?: number;
+  arrowTailWidth?: number;
+  arrowCurve?: number;
 }
 
 // 图片元素

@@ -75,6 +75,13 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           △
         </button>
         <button
+          onClick={() => onCreateElement(ElementType.ARROW)}
+          style={buttonStyle}
+          title="创建箭头"
+        >
+          ➔
+        </button>
+        <button
           onClick={() => onCreateElement(ElementType.TEXT)}
           style={buttonStyle}
           title="创建文本"

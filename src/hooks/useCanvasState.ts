@@ -27,10 +27,15 @@ export const useCanvasState = () => {
   // 加载初始状态
   useEffect(() => {
     const savedState = loadCanvasState();
+    console.log('Loading saved state:', savedState);
     if (savedState && savedState.elements && savedState.elements.length > 0) {
-      setElements(savedState.elements);
-      setViewport(savedState.viewport);
+      console.log('Found saved elements:', savedState.elements.length);
+      // 立即设置状态，不使用 setTimeout
+      setElements([...savedState.elements]);
+      setViewport({...savedState.viewport});
+      console.log('Elements set from saved state');
     } else {
+      console.log('No saved state, creating initial elements');
       // 创建一些初始元素用于演示
       createInitialElements();
     }
@@ -109,13 +114,31 @@ export const useCanvasState = () => {
       } as ShapeElement,
       {
         id: generateId(),
+        type: ElementType.ARROW,
+        x: 150,
+        y: 280,
+        width: 220,
+        height: 80,
+        rotation: 0,
+        zIndex: 4,
+        backgroundColor: 'transparent',
+        borderWidth: 4,
+        borderColor: '#1e3a8a',
+        arrowStart: { x: 20, y: 40 },
+        arrowEnd: { x: 200, y: 40 },
+        arrowHeadSize: 18,
+        arrowTailWidth: 4,
+        arrowCurve: 0,
+      } as ShapeElement,
+      {
+        id: generateId(),
         type: ElementType.TEXT,
         x: 100,
         y: 300,
         width: 400,
         height: 100,
         rotation: 0,
-        zIndex: 4,
+        zIndex: 5,
         content: '欢迎使用画布编辑器！',
         style: {
           fontFamily: 'Arial',
@@ -139,6 +162,50 @@ export const useCanvasState = () => {
     setElements((prev) =>
       prev.map((el) => {
         if (el.id === id) {
+          if (el.type === 'arrow') {
+            const arrowEl = el as ShapeElement;
+            const shapeUpdates = updates as Partial<ShapeElement>;
+
+            const widthUpdated = typeof shapeUpdates.width === 'number';
+            const heightUpdated = typeof shapeUpdates.height === 'number';
+            const newWidth = widthUpdated ? (shapeUpdates.width as number) : arrowEl.width;
+            const newHeight = heightUpdated ? (shapeUpdates.height as number) : arrowEl.height;
+
+            const scaleX = widthUpdated && arrowEl.width !== 0 ? newWidth / arrowEl.width : 1;
+            const scaleY = heightUpdated && arrowEl.height !== 0 ? newHeight / arrowEl.height : 1;
+
+            const hasNewStart = shapeUpdates.arrowStart !== undefined;
+            const hasNewEnd = shapeUpdates.arrowEnd !== undefined;
+
+            const nextStart = hasNewStart
+              ? shapeUpdates.arrowStart || undefined
+              : arrowEl.arrowStart
+              ? {
+                  x: arrowEl.arrowStart.x * scaleX,
+                  y: arrowEl.arrowStart.y * scaleY,
+                }
+              : undefined;
+
+            const nextEnd = hasNewEnd
+              ? shapeUpdates.arrowEnd || undefined
+              : arrowEl.arrowEnd
+              ? {
+                  x: arrowEl.arrowEnd.x * scaleX,
+                  y: arrowEl.arrowEnd.y * scaleY,
+                }
+              : undefined;
+
+            const merged: ShapeElement = {
+              ...arrowEl,
+              ...shapeUpdates,
+              width: newWidth,
+              height: newHeight,
+              arrowStart: nextStart,
+              arrowEnd: nextEnd,
+            } as ShapeElement;
+
+            return merged as CanvasElement;
+          }
           // 如果是文字元素且更新了 style，需要深度合并
           if (el.type === 'text' && 'style' in updates) {
             const textEl = el as TextElement;
@@ -234,6 +301,32 @@ export const useCanvasState = () => {
             borderWidth: 2,
             borderColor: '#1e40af',
             cornerRadius: type === ElementType.ROUNDED_RECTANGLE ? 20 : undefined,
+            content: '',
+            textStyle: {
+              fontFamily: 'Arial',
+              fontSize: 16,
+              color: '#ffffff',
+              bold: false,
+              italic: false,
+              underline: false,
+              strikethrough: false,
+            },
+          } as ShapeElement;
+          break;
+        case ElementType.ARROW:
+          newElement = {
+            ...baseProps,
+            type,
+            width: 180,
+            height: 60,
+            backgroundColor: 'transparent',
+            borderWidth: 4,
+            borderColor: '#2563eb',
+            arrowStart: { x: 20, y: 30 },
+            arrowEnd: { x: 160, y: 30 },
+            arrowHeadSize: 18,
+            arrowTailWidth: 4,
+            arrowCurve: 0,
           } as ShapeElement;
           break;
         case ElementType.TEXT:
@@ -280,6 +373,93 @@ export const useCanvasState = () => {
     return elements.filter((el) => selectedIds.includes(el.id));
   }, [elements, selectedIds]);
 
+  // 创建箭头（使用指定的起点和终点）
+  const createArrowWithPoints = useCallback(
+    (startX: number, startY: number, endX: number, endY: number) => {
+      // 计算箭头的边界框
+      const minX = Math.min(startX, endX);
+      const minY = Math.min(startY, endY);
+      const width = Math.max(Math.abs(endX - startX), 50);
+      const height = Math.max(Math.abs(endY - startY), 50);
+      
+      // 转换为相对于边界框的坐标
+      const relativeStartX = startX - minX;
+      const relativeStartY = startY - minY;
+      const relativeEndX = endX - minX;
+      const relativeEndY = endY - minY;
+      
+      const newArrow: ShapeElement = {
+        id: generateId(),
+        type: ElementType.ARROW,
+        x: minX,
+        y: minY,
+        width: width,
+        height: height,
+        rotation: 0,
+        zIndex: elements.length,
+        backgroundColor: 'transparent',
+        borderWidth: 4,
+        borderColor: '#2563eb',
+        arrowStart: { x: relativeStartX, y: relativeStartY },
+        arrowEnd: { x: relativeEndX, y: relativeEndY },
+        arrowHeadSize: 18,
+        arrowTailWidth: 4,
+        arrowCurve: 0,
+      };
+      
+      setElements((prev) => [...prev, newArrow]);
+      setSelectedIds([newArrow.id]);
+    },
+    [elements.length]
+  );
+
+  // 更新箭头的起点或终点位置
+  const updateArrowPoint = useCallback(
+    (elementId: string, point: 'start' | 'end', x: number, y: number) => {
+      setElements((prev) =>
+        prev.map((el) => {
+          if (el.id !== elementId || el.type !== ElementType.ARROW) {
+            return el;
+          }
+
+          const shapeEl = el as ShapeElement;
+          
+          // 更新点位置
+          const updatedArrowStart = point === 'start' ? { x, y } : shapeEl.arrowStart!;
+          const updatedArrowEnd = point === 'end' ? { x, y } : shapeEl.arrowEnd!;
+          
+          // 重新计算边界框
+          const absoluteStartX = shapeEl.x + updatedArrowStart.x;
+          const absoluteStartY = shapeEl.y + updatedArrowStart.y;
+          const absoluteEndX = shapeEl.x + updatedArrowEnd.x;
+          const absoluteEndY = shapeEl.y + updatedArrowEnd.y;
+          
+          const minX = Math.min(absoluteStartX, absoluteEndX);
+          const minY = Math.min(absoluteStartY, absoluteEndY);
+          const width = Math.max(Math.abs(absoluteEndX - absoluteStartX), 50);
+          const height = Math.max(Math.abs(absoluteEndY - absoluteStartY), 50);
+          
+          // 转换为新的相对坐标
+          const relativeStartX = absoluteStartX - minX;
+          const relativeStartY = absoluteStartY - minY;
+          const relativeEndX = absoluteEndX - minX;
+          const relativeEndY = absoluteEndY - minY;
+          
+          return {
+            ...shapeEl,
+            x: minX,
+            y: minY,
+            width,
+            height,
+            arrowStart: { x: relativeStartX, y: relativeStartY },
+            arrowEnd: { x: relativeEndX, y: relativeEndY },
+          };
+        })
+      );
+    },
+    []
+  );
+
   return {
     elements,
     selectedIds,
@@ -294,6 +474,8 @@ export const useCanvasState = () => {
     copySelected,
     paste,
     createElement,
+    createArrowWithPoints,
+    updateArrowPoint,
     getSelectedElements,
   };
 };

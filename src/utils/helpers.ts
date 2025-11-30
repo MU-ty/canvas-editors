@@ -15,12 +15,24 @@ export const isElementInSelection = (
   const minY = Math.min(selection.startY, selection.endY);
   const maxY = Math.max(selection.startY, selection.endY);
 
-  return (
-    element.x >= minX &&
-    element.x + element.width <= maxX &&
-    element.y >= minY &&
-    element.y + element.height <= maxY
-  );
+  if (!element.rotation || element.rotation === 0) {
+    // 未旋转的元素
+    return (
+      element.x >= minX &&
+      element.x + element.width <= maxX &&
+      element.y >= minY &&
+      element.y + element.height <= maxY
+    );
+  } else {
+    // 旋转的元素，检查其边界框是否与选区重叠
+    const bbox = getBoundingBox([element]);
+    return (
+      bbox.x >= minX &&
+      bbox.x + bbox.width <= maxX &&
+      bbox.y >= minY &&
+      bbox.y + bbox.height <= maxY
+    );
+  }
 };
 
 // 检查点是否在元素内
@@ -29,11 +41,35 @@ export const isPointInElement = (
   y: number,
   element: CanvasElement
 ): boolean => {
+  // 如果元素没有旋转，使用简单的矩形碰撞检测
+  if (!element.rotation || element.rotation === 0) {
+    return (
+      x >= element.x &&
+      x <= element.x + element.width &&
+      y >= element.y &&
+      y <= element.y + element.height
+    );
+  }
+
+  // 对于旋转的元素，需要反向旋转点来检测
+  const centerX = element.x + element.width / 2;
+  const centerY = element.y + element.height / 2;
+  
+  // 将点相对于中心进行坐标变换
+  const dx = x - centerX;
+  const dy = y - centerY;
+  
+  // 反向旋转点
+  const angle = (element.rotation * Math.PI) / 180;
+  const rotatedX = dx * Math.cos(-angle) - dy * Math.sin(-angle);
+  const rotatedY = dx * Math.sin(-angle) + dy * Math.cos(-angle);
+  
+  // 检测旋转后的点是否在矩形内
   return (
-    x >= element.x &&
-    x <= element.x + element.width &&
-    y >= element.y &&
-    y <= element.y + element.height
+    rotatedX >= -element.width / 2 &&
+    rotatedX <= element.width / 2 &&
+    rotatedY >= -element.height / 2 &&
+    rotatedY <= element.height / 2
   );
 };
 
@@ -49,10 +85,36 @@ export const getBoundingBox = (elements: CanvasElement[]) => {
   let maxY = -Infinity;
 
   elements.forEach((element) => {
-    minX = Math.min(minX, element.x);
-    minY = Math.min(minY, element.y);
-    maxX = Math.max(maxX, element.x + element.width);
-    maxY = Math.max(maxY, element.y + element.height);
+    if (!element.rotation || element.rotation === 0) {
+      // 未旋转的元素
+      minX = Math.min(minX, element.x);
+      minY = Math.min(minY, element.y);
+      maxX = Math.max(maxX, element.x + element.width);
+      maxY = Math.max(maxY, element.y + element.height);
+    } else {
+      // 旋转的元素，计算四个角的旋转后位置
+      const cx = element.x + element.width / 2;
+      const cy = element.y + element.height / 2;
+      const angle = (element.rotation * Math.PI) / 180;
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      
+      const corners = [
+        { x: -element.width / 2, y: -element.height / 2 },
+        { x: element.width / 2, y: -element.height / 2 },
+        { x: element.width / 2, y: element.height / 2 },
+        { x: -element.width / 2, y: element.height / 2 },
+      ];
+      
+      corners.forEach((corner) => {
+        const rotatedX = corner.x * cos - corner.y * sin + cx;
+        const rotatedY = corner.x * sin + corner.y * cos + cy;
+        minX = Math.min(minX, rotatedX);
+        minY = Math.min(minY, rotatedY);
+        maxX = Math.max(maxX, rotatedX);
+        maxY = Math.max(maxY, rotatedY);
+      });
+    }
   });
 
   return {

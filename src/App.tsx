@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { CanvasView } from './components/CanvasView';
 import { Toolbar } from './components/Toolbar';
 import { PropertyPanel } from './components/PropertyPanel';
@@ -19,8 +19,12 @@ function App() {
     copySelected,
     paste,
     createElement,
+    createArrowWithPoints,
+    updateArrowPoint,
     getSelectedElements,
   } = useCanvasState();
+
+  const [isDrawingArrow, setIsDrawingArrow] = useState(false);
 
   // 处理键盘快捷键
   useEffect(() => {
@@ -58,12 +62,32 @@ function App() {
   // 创建元素（在画布中心）
   const handleCreateElement = useCallback(
     (type: ElementType) => {
+      if (type === ElementType.ARROW) {
+        // 进入箭头绘制模式
+        setIsDrawingArrow(true);
+        clearSelection();
+        return;
+      }
       const centerX = -viewport.x / viewport.scale + window.innerWidth / 2 / viewport.scale;
       const centerY = -viewport.y / viewport.scale + window.innerHeight / 2 / viewport.scale;
       createElement(type, centerX - 75, centerY - 75);
     },
-    [viewport, createElement]
+    [viewport, createElement, clearSelection]
   );
+
+  // 创建箭头
+  const handleCreateArrow = useCallback(
+    (startX: number, startY: number, endX: number, endY: number) => {
+      createArrowWithPoints(startX, startY, endX, endY);
+      setIsDrawingArrow(false);
+    },
+    [createArrowWithPoints]
+  );
+
+  // 取消箭头绘制
+  const handleCancelArrowDrawing = useCallback(() => {
+    setIsDrawingArrow(false);
+  }, []);
 
   // 处理图片上传
   const handleImageUpload = useCallback(
@@ -131,6 +155,10 @@ function App() {
         onCopy={copySelected}
         onPaste={paste}
         onDelete={handleDelete}
+        onCreateArrow={handleCreateArrow}
+        isDrawingArrow={isDrawingArrow}
+        onCancelArrowDrawing={handleCancelArrowDrawing}
+        onUpdateArrowPoint={updateArrowPoint}
       />
       
       <Toolbar

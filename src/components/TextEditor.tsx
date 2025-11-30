@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { TextElement } from '../types';
+import type { CanvasElement, TextElement, ShapeElement, TextStyle } from '../types';
 
 interface TextEditorProps {
-  element: TextElement;
+  element: CanvasElement | any;
   viewport: { x: number; y: number; scale: number };
   onUpdate: (content: string) => void;
   onClose: () => void;
@@ -14,7 +14,7 @@ export const TextEditor: React.FC<TextEditorProps> = ({
   onUpdate,
   onClose,
 }) => {
-  const [text, setText] = useState(element.content);
+  const [text, setText] = useState((element as any).content || '');
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -25,24 +25,35 @@ export const TextEditor: React.FC<TextEditorProps> = ({
   }, []);
 
   const handleBlur = () => {
-    if (text.trim()) {
-      onUpdate(text);
-    }
+    onUpdate(text);
     onClose();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       onClose();
+      e.stopPropagation();
     } else if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+      e.stopPropagation();
       handleBlur();
+    } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.stopPropagation();
     }
   };
 
   const left = element.x * viewport.scale + viewport.x;
   const top = element.y * viewport.scale + viewport.y;
   const width = element.width * viewport.scale;
+
+  const height = element.height * viewport.scale;
+  const isShape = element.type && element.type !== 'text';
+
+  // 获取样式（支持文本元素与图形内部文本）
+  const styleSource: TextStyle | undefined =
+    element.type === 'text' ? (element as TextElement).style : (element as ShapeElement).textStyle;
+
+  const fontSizeScaled = (styleSource?.fontSize || 16) * viewport.scale;
 
   return (
     <textarea
@@ -56,21 +67,26 @@ export const TextEditor: React.FC<TextEditorProps> = ({
         left,
         top,
         width,
-        minHeight: element.height * viewport.scale,
-        fontSize: element.style.fontSize * viewport.scale,
-        fontFamily: element.style.fontFamily,
-        color: element.style.color,
-        backgroundColor: element.style.backgroundColor || 'transparent',
-        fontWeight: element.style.bold ? 'bold' : 'normal',
-        fontStyle: element.style.italic ? 'italic' : 'normal',
-        textDecoration: element.style.underline ? 'underline' : element.style.strikethrough ? 'line-through' : 'none',
+        height,
+        minHeight: height,
+        fontSize: fontSizeScaled,
+        fontFamily: styleSource?.fontFamily || 'Arial',
+        color: styleSource?.color || '#000000',
+        backgroundColor: styleSource?.backgroundColor || 'transparent',
+        fontWeight: styleSource?.bold ? 'bold' : 'normal',
+        fontStyle: styleSource?.italic ? 'italic' : 'normal',
+        textDecoration: styleSource?.underline ? 'underline' : styleSource?.strikethrough ? 'line-through' : 'none',
         border: '2px solid #3b82f6',
         outline: 'none',
-        padding: '4px',
+        padding: '6px 8px',
         resize: 'none',
         overflow: 'hidden',
         zIndex: 1000,
+        textAlign: isShape ? 'center' : 'left',
+        lineHeight: `${fontSizeScaled}px`,
       }}
     />
   );
 };
+
+export default TextEditor;

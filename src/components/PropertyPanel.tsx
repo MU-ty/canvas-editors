@@ -23,6 +23,112 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
 
   const renderShapeProperties = (shape: ShapeElement) => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {/* 图形内部文本样式 */}
+      <div>
+        <label style={labelStyle}>字体:</label>
+        <select
+          value={(shape as any).textStyle?.fontFamily || 'Arial'}
+          onChange={(e) =>
+            onUpdateElement(shape.id, {
+              textStyle: { ...(shape as any).textStyle, fontFamily: e.target.value },
+            } as any)
+          }
+          style={inputStyle}
+        >
+          <option value="Arial">Arial</option>
+          <option value="Times New Roman">Times New Roman</option>
+          <option value="Courier New">Courier New</option>
+          <option value="Georgia">Georgia</option>
+          <option value="Verdana">Verdana</option>
+        </select>
+      </div>
+      <div>
+        <label style={labelStyle}>字号:</label>
+        <input
+          type="number"
+          value={(shape as any).textStyle?.fontSize || 16}
+          onChange={(e) =>
+            onUpdateElement(shape.id, {
+              textStyle: { ...(shape as any).textStyle, fontSize: Number(e.target.value) },
+            } as any)
+          }
+          min="8"
+          max="120"
+          style={inputStyle}
+        />
+      </div>
+      <div>
+        <label style={labelStyle}>颜色:</label>
+        <input
+          type="color"
+          value={(shape as any).textStyle?.color || '#000000'}
+          onChange={(e) =>
+            onUpdateElement(shape.id, {
+              textStyle: { ...(shape as any).textStyle, color: e.target.value },
+            } as any)
+          }
+          style={inputStyle}
+        />
+      </div>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <button
+          onClick={() =>
+            onUpdateElement(shape.id, {
+              textStyle: { ...(shape as any).textStyle, bold: !(shape as any).textStyle?.bold },
+            } as any)
+          }
+          style={{
+            ...checkboxButtonStyle,
+            backgroundColor: (shape as any).textStyle?.bold ? '#3b82f6' : 'white',
+            color: (shape as any).textStyle?.bold ? 'white' : 'black',
+          }}
+        >
+          <strong>B</strong>
+        </button>
+        <button
+          onClick={() =>
+            onUpdateElement(shape.id, {
+              textStyle: { ...(shape as any).textStyle, italic: !(shape as any).textStyle?.italic },
+            } as any)
+          }
+          style={{
+            ...checkboxButtonStyle,
+            backgroundColor: (shape as any).textStyle?.italic ? '#3b82f6' : 'white',
+            color: (shape as any).textStyle?.italic ? 'white' : 'black',
+          }}
+        >
+          <em>I</em>
+        </button>
+        <button
+          onClick={() =>
+            onUpdateElement(shape.id, {
+              textStyle: { ...(shape as any).textStyle, underline: !(shape as any).textStyle?.underline },
+            } as any)
+          }
+          style={{
+            ...checkboxButtonStyle,
+            backgroundColor: (shape as any).textStyle?.underline ? '#3b82f6' : 'white',
+            color: (shape as any).textStyle?.underline ? 'white' : 'black',
+          }}
+        >
+          <u>U</u>
+        </button>
+        <button
+          onClick={() =>
+            onUpdateElement(shape.id, {
+              textStyle: { ...(shape as any).textStyle, strikethrough: !(shape as any).textStyle?.strikethrough },
+            } as any)
+          }
+          style={{
+            ...checkboxButtonStyle,
+            backgroundColor: (shape as any).textStyle?.strikethrough ? '#3b82f6' : 'white',
+            color: (shape as any).textStyle?.strikethrough ? 'white' : 'black',
+          }}
+        >
+          <s>S</s>
+        </button>
+      </div>
+
       <div>
         <label style={labelStyle}>背景色:</label>
         <input
@@ -75,6 +181,145 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
       )}
     </div>
   );
+
+  const renderArrowProperties = (arrow: ShapeElement) => {
+    const startDefaults = arrow.arrowStart ?? { x: 10, y: arrow.height / 2 };
+    const endDefaults = arrow.arrowEnd ?? { x: arrow.width - 10, y: arrow.height / 2 };
+    const tailWidth = arrow.arrowTailWidth ?? arrow.borderWidth ?? 4;
+    const curveValue = arrow.arrowCurve ?? 0;
+
+    const updateStart = (coords: Partial<{ x: number; y: number }>) => {
+      onUpdateElement(arrow.id, {
+        arrowStart: { ...startDefaults, ...coords },
+      } as any);
+    };
+
+    const updateEnd = (coords: Partial<{ x: number; y: number }>) => {
+      onUpdateElement(arrow.id, {
+        arrowEnd: { ...endDefaults, ...coords },
+      } as any);
+    };
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+          <div>
+            <label style={labelStyle}>起点 X:</label>
+            <input
+              type="number"
+              value={Number(startDefaults.x.toFixed(1))}
+              onChange={(e) => updateStart({ x: Number(e.target.value) })}
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>起点 Y:</label>
+            <input
+              type="number"
+              value={Number(startDefaults.y.toFixed(1))}
+              onChange={(e) => updateStart({ y: Number(e.target.value) })}
+              style={inputStyle}
+            />
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+          <div>
+            <label style={labelStyle}>终点 X:</label>
+            <input
+              type="number"
+              value={Number(endDefaults.x.toFixed(1))}
+              onChange={(e) => updateEnd({ x: Number(e.target.value) })}
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>终点 Y:</label>
+            <input
+              type="number"
+              value={Number(endDefaults.y.toFixed(1))}
+              onChange={(e) => updateEnd({ y: Number(e.target.value) })}
+              style={inputStyle}
+            />
+          </div>
+        </div>
+        <div>
+          <label style={labelStyle}>箭头大小:</label>
+          <input
+            type="number"
+            value={arrow.arrowHeadSize ?? 16}
+            min={4}
+            max={80}
+            onChange={(e) =>
+              onUpdateElement(arrow.id, {
+                arrowHeadSize: Number(e.target.value),
+              } as any)
+            }
+            style={inputStyle}
+          />
+        </div>
+        <div>
+          <label style={labelStyle}>箭身厚度:</label>
+          <input
+            type="number"
+            value={tailWidth}
+            min={1}
+            max={64}
+            onChange={(e) =>
+              onUpdateElement(arrow.id, {
+                borderWidth: Number(e.target.value),
+                arrowTailWidth: Number(e.target.value),
+              } as any)
+            }
+            style={inputStyle}
+          />
+        </div>
+        <div>
+          <label style={labelStyle}>弯曲程度:</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <input
+              type="range"
+              min={-1}
+              max={1}
+              step={0.05}
+              value={curveValue}
+              onChange={(e) =>
+                onUpdateElement(arrow.id, {
+                  arrowCurve: Number(e.target.value),
+                } as any)
+              }
+              style={{ flexGrow: 1 }}
+            />
+            <input
+              type="number"
+              value={Number(curveValue.toFixed(2))}
+              min={-1}
+              max={1}
+              step={0.05}
+              onChange={(e) =>
+                onUpdateElement(arrow.id, {
+                  arrowCurve: Number(e.target.value),
+                } as any)
+              }
+              style={{ ...inputStyle, width: '80px' }}
+            />
+          </div>
+        </div>
+        <div>
+          <label style={labelStyle}>颜色:</label>
+          <input
+            type="color"
+            value={arrow.borderColor}
+            onChange={(e) =>
+              onUpdateElement(arrow.id, {
+                borderColor: e.target.value,
+              } as any)
+            }
+            style={inputStyle}
+          />
+        </div>
+      </div>
+    );
+  };
 
   const renderTextProperties = (text: TextElement) => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -315,6 +560,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
       {element.type === ElementType.ROUNDED_RECTANGLE && renderShapeProperties(element as ShapeElement)}
       {element.type === ElementType.CIRCLE && renderShapeProperties(element as ShapeElement)}
       {element.type === ElementType.TRIANGLE && renderShapeProperties(element as ShapeElement)}
+      {element.type === ElementType.ARROW && renderArrowProperties(element as ShapeElement)}
       {element.type === ElementType.TEXT && renderTextProperties(element as TextElement)}
       {element.type === ElementType.IMAGE && renderImageProperties(element as ImageElement)}
     </div>

@@ -6,9 +6,14 @@ import {
   isPointInElement,
   screenToCanvas,
 } from '../utils/helpers';
+import { detectGuideLines, calculateSnappedPosition } from '../utils/guideLines';
+import type { GuideLine } from '../utils/guideLines';
 import { ResizeHandles } from './ResizeHandles';
-import { TextEditor } from './TextEditor';
+import { ArrowHandles } from './ArrowHandles';
+import TextEditor from './TextEditor.tsx';
 import { ContextMenu } from './ContextMenu';
+import { MiniMap } from './MiniMap';
+import { GuideLineRenderer } from './GuideLineRenderer';
 
 interface CanvasViewProps {
   elements: CanvasElement[];
@@ -21,6 +26,10 @@ interface CanvasViewProps {
   onCopy: () => void;
   onPaste: () => void;
   onDelete: () => void;
+  onCreateArrow?: (startX: number, startY: number, endX: number, endY: number) => void;
+  isDrawingArrow?: boolean;
+  onCancelArrowDrawing?: () => void;
+  onUpdateArrowPoint?: (elementId: string, point: 'start' | 'end', x: number, y: number) => void;
 }
 
 const InteractionMode = {
@@ -29,6 +38,7 @@ const InteractionMode = {
   SELECTING: 'selecting',
   DRAGGING: 'dragging',
   RESIZING: 'resizing',
+  DRAWING_ARROW: 'drawing-arrow',
 } as const;
 
 type InteractionMode = typeof InteractionMode[keyof typeof InteractionMode];
@@ -44,6 +54,10 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
   onCopy,
   onPaste,
   onDelete,
+  onCreateArrow,
+  isDrawingArrow = false,
+  onCancelArrowDrawing,
+  onUpdateArrowPoint,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<PixiRenderer | null>(null);
@@ -63,8 +77,10 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
   } | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [guidelines, setGuidelines] = useState<GuideLine[]>([]);
   const dragThreshold = 5; // 拖拽阈值(像素)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [arrowStartPoint, setArrowStartPoint] = useState<{ x: number; y: number } | null>(null);
 
   // 初始化渲染器
   useEffect(() => {
@@ -75,7 +91,11 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
 
     // 等待渲染器初始化完成
     renderer.waitForInit().then(() => {
-      setRendererReady(true);
+      console.log('Renderer initialized');
+      // 确保 rendererRef 仍然指向当前 renderer（防止组件卸载后设置状态）
+      if (rendererRef.current === renderer) {
+        setRendererReady(true);
+      }
     });
 
     return () => {
@@ -83,26 +103,51 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
         renderer.destroy();
       }
       rendererRef.current = null;
+      setRendererReady(false);
     };
   }, []);
 
-  // 渲染元素
+  // 渲染元素 - 确保在渲染器就绪且元素存在时触发
   useEffect(() => {
-    if (!rendererRef.current || !rendererReady) return;
+    const renderer = rendererRef.current;
+    if (!renderer || !rendererReady) {
+      console.log('Render skipped - rendererReady:', rendererReady, 'renderer:', !!renderer);
+      return;
+    }
+
+    console.log('Render useEffect triggered - rendererReady:', rendererReady, 'elements:', elements.length);
+
+    // 使用标记来处理竞态条件
+    let cancelled = false;
 
     // 清空并重新渲染所有元素
     const renderAll = async () => {
-      rendererRef.current!.clear();
+      console.log('Starting render of', elements.length, 'elements');
+      renderer.clear();
+      
       for (const element of elements) {
-        await rendererRef.current!.renderElement(element);
+        if (cancelled) {
+          console.log('Render cancelled');
+          return;
+        }
+        await renderer.renderElement(element);
+      }
+      
+      if (!cancelled) {
+        console.log('Finished rendering');
       }
     };
     
     renderAll();
+
+    return () => {
+      cancelled = true;
+    };
   }, [elements, rendererReady]);
 
   // 更新视口
   useEffect(() => {
+    console.log('Viewport update:', viewport, 'rendererReady:', rendererReady);
     if (!rendererRef.current || !rendererReady) return;
     rendererRef.current.updateViewport(viewport.x, viewport.y, viewport.scale);
   }, [viewport, rendererReady]);
@@ -119,6 +164,23 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
       const screenX = e.clientX - rect.left;
       const screenY = e.clientY - rect.top;
       const { x: canvasX, y: canvasY } = screenToCanvas(screenX, screenY, viewport);
+
+      // 如果正在绘制箭头
+      if (isDrawingArrow) {
+        if (!arrowStartPoint) {
+          // 设置起点
+          setArrowStartPoint({ x: canvasX, y: canvasY });
+          setMode(InteractionMode.DRAWING_ARROW);
+        } else {
+          // 设置终点并创建箭头
+          if (onCreateArrow) {
+            onCreateArrow(arrowStartPoint.x, arrowStartPoint.y, canvasX, canvasY);
+          }
+          setArrowStartPoint(null);
+          setMode(InteractionMode.NONE);
+        }
+        return;
+      }
 
       // 空格键 + 鼠标按下 = 拖拽画布
       if (e.button === 0 && e.nativeEvent.which === 1 && e.altKey) {
@@ -184,7 +246,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
         }
       }
     },
-    [elements, selectedIds, viewport, onSelectElements, onClearSelection, editingTextId]
+    [elements, selectedIds, viewport, onSelectElements, onClearSelection, editingTextId, isDrawingArrow, arrowStartPoint, onCreateArrow]
   );
 
   // 鼠标移动
@@ -231,12 +293,31 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
           }
         }
 
-        elementStartPos.forEach((startPos, id) => {
-          onUpdateElement(id, {
-            x: startPos.x + dx,
-            y: startPos.y + dy,
+        // 获取所有选中的元素
+        const draggedElements = Array.from(elementStartPos.entries()).map(([id, startPos]) => {
+          const element = elements.find((e) => e.id === id);
+          return element ? { ...element, x: startPos.x + dx, y: startPos.y + dy } : null;
+        }).filter(Boolean) as CanvasElement[];
+
+        // 检测辅助线（只检测第一个拖拽的元素）
+        if (draggedElements.length > 0) {
+          const otherElements = elements.filter((e) => !elementStartPos.has(e.id));
+          const detectedGuideLines = detectGuideLines(draggedElements[0], otherElements, viewport);
+          setGuidelines(detectedGuideLines);
+
+          // 计算吸附位置（只吸附第一个元素，其他元素跟随）
+          const snappedResult = calculateSnappedPosition(draggedElements[0], otherElements, viewport);
+          const snappedDx = snappedResult.x - draggedElements[0].x;
+          const snappedDy = snappedResult.y - draggedElements[0].y;
+
+          // 应用位置更新（使用原始或吸附后的偏移）
+          elementStartPos.forEach((startPos, id) => {
+            onUpdateElement(id, {
+              x: startPos.x + dx + snappedDx,
+              y: startPos.y + dy + snappedDy,
+            });
           });
-        });
+        }
       }
       // RESIZING 模式由 document 监听器处理
     },
@@ -251,6 +332,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
       onUpdateViewport,
       onUpdateElement,
       editingTextId,
+      elements,
     ]
   );
 
@@ -275,6 +357,7 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
     setResizeHandle(null);
     setResizeStartData(null);
     setIsDragging(false);
+    setGuidelines([]); // 清除辅助线
   }, [mode, selectionBox, elements, onSelectElements, editingTextId]);
 
   // 开始缩放
@@ -491,8 +574,11 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
         }
       }
 
-      // 如果双击的是文字元素，进入编辑模式
-      if (clickedElement && clickedElement.type === 'text') {
+      // 如果双击的是文字元素或带有内部文本的图形，进入编辑模式
+      if (
+        clickedElement &&
+        (clickedElement.type === 'text' || (['rectangle','rounded-rectangle','circle','triangle'] as string[]).includes(clickedElement.type))
+      ) {
         e.stopPropagation();
         onSelectElements([clickedElement.id]);
         setEditingTextId(clickedElement.id);
@@ -504,6 +590,22 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
     },
     [elements, viewport, onSelectElements]
   );
+
+  // 处理键盘事件 - ESC 取消箭头绘制
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isDrawingArrow) {
+        setArrowStartPoint(null);
+        setMode(InteractionMode.NONE);
+        if (onCancelArrowDrawing) {
+          onCancelArrowDrawing();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isDrawingArrow, onCancelArrowDrawing]);
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
@@ -520,13 +622,50 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
           width: '100%',
           height: '100%',
           cursor:
-            mode === InteractionMode.PANNING
+            isDrawingArrow
+              ? 'crosshair'
+              : mode === InteractionMode.PANNING
               ? 'grabbing'
               : mode === InteractionMode.DRAGGING
               ? 'move'
               : 'default',
         }}
       />
+
+      {/* 箭头绘制提示 */}
+      {isDrawingArrow && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            backgroundColor: 'rgba(59, 130, 246, 0.9)',
+            color: 'white',
+            padding: '12px 24px',
+            borderRadius: '8px',
+            fontSize: '14px',
+            pointerEvents: 'none',
+            zIndex: 2000,
+            boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+          }}
+        >
+          {arrowStartPoint ? '点击确定箭头终点' : '点击确定箭头起点'}
+          <div style={{ fontSize: '12px', marginTop: '4px', opacity: 0.9 }}>
+            按 ESC 取消
+          </div>
+        </div>
+      )}
+
+      {/* 辅助线渲染 */}
+      {canvasRef.current && (
+        <GuideLineRenderer
+          guidelines={guidelines}
+          viewport={viewport}
+          canvasWidth={canvasRef.current.width}
+          canvasHeight={canvasRef.current.height}
+        />
+      )}
 
       {/* 框选矩形 */}
       {selectionBox && (
@@ -555,10 +694,30 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
         />
       )}
 
+      {/* 箭头控制点 */}
+      {!editingTextId && selectedIds.length === 1 && onUpdateArrowPoint && (() => {
+        const selectedElement = elements.find((el) => el.id === selectedIds[0]);
+        if (selectedElement?.type === 'arrow') {
+          return (
+            <ArrowHandles
+              element={selectedElement as any}
+              viewport={viewport}
+              onUpdateArrowPoint={(point, x, y) => {
+                onUpdateArrowPoint(selectedIds[0], point, x, y);
+              }}
+            />
+          );
+        }
+        return null;
+      })()}
+
       {/* 文字编辑器 */}
       {editingTextId && (() => {
         const textElement = elements.find((el) => el.id === editingTextId);
-        if (!textElement || textElement.type !== 'text') return null;
+        if (!textElement) return null;
+        // 允许 text 类型或 shape
+        const isEditableShape = (['rectangle','rounded-rectangle','circle','triangle'] as string[]).includes(textElement.type);
+        if (textElement.type !== 'text' && !isEditableShape) return null;
         return (
           <TextEditor
             element={textElement}
@@ -583,6 +742,15 @@ export const CanvasView: React.FC<CanvasViewProps> = ({
           onClose={() => setContextMenu(null)}
         />
       )}
+
+      {/* MiniMap */}
+      <MiniMap
+        elements={elements}
+        viewport={viewport}
+        canvasWidth={window.innerWidth}
+        canvasHeight={window.innerHeight}
+        onViewportChange={onUpdateViewport}
+      />
     </div>
   );
 };
